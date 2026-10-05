@@ -8,6 +8,7 @@
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记备品备件</button>
         <button class="btn" type="button" @click="exportRows">导出备品备件清单</button>
+        <button class="btn" type="button" @click="exportTodos">导出试验消缺待办</button>
       </div>
     </header>
 
@@ -63,6 +64,23 @@
       </tbody>
     </table>
 
+    <h3 class="section-title">试验消缺待办清单（主变试验/告警自动落入，与主变压器页同一份）</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th v-for="column in todoColumns" :key="column">{{ column }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="todo in todos" :key="todo.id">
+          <td v-for="column in todoColumns" :key="column">{{ todoCell(todo, column) }}</td>
+        </tr>
+        <tr v-if="!todos.length">
+          <td :colspan="todoColumns.length" class="empty-state">暂无试验消缺待办</td>
+        </tr>
+      </tbody>
+    </table>
+
     <footer class="page-foot">
       <span>共 {{ total }} 条备品备件记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
@@ -74,20 +92,25 @@
 import { computed, onMounted, ref } from 'vue'
 
 import {
+  downloadCsv,
   downloadEntries,
+  exportRowsCsv,
   listEntries,
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
-import type { EntryRow } from '@/data/types'
+import { listSpareTodos } from '@/api/transformer-service'
+import type { EntryRow, SpareTodo } from '@/data/types'
 
 const meta = moduleMeta('spare')
 const columns = ["备件编号", "备件名称", "规格型号", "适用设备", "存放位置", "现有数量", "最低储备量", "备件状态"]
+const todoColumns = ["来源单号", "变压器编号", "事项", "建议备件", "登记时间", "状态", "关闭时间", "关闭原因", "资料来源"]
 const actions = ["办理验收", "领用备件", "提交补充"]
 const statuses = ["待验收", "已登记", "已领用", "待补充"]
 const stats = [{"label": "已登记备件", "value": 0}, {"label": "待补充备件", "value": 0}, {"label": "本月领用", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
+const todos = ref<SpareTodo[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
@@ -106,6 +129,19 @@ function resetFilters() {
 
 function exportRows() {
   downloadEntries(meta.key)
+}
+
+function exportTodos() {
+  const data = todos.value.map((t) =>
+    todoColumns.map((c) => String(t[c as keyof SpareTodo] ?? '')),
+  )
+  const file = exportRowsCsv('试验消缺待办-清单.csv', todoColumns, data)
+  downloadCsv(file.filename, file.content)
+}
+
+function todoCell(todo: SpareTodo, column: string): string {
+  const value = todo[column as keyof SpareTodo]
+  return value === undefined || value === '' ? '—' : String(value)
 }
 
 function openCreate() {
@@ -128,6 +164,7 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    todos.value = listSpareTodos()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '备品备件列表读取失败'
   }
@@ -135,3 +172,7 @@ function reload() {
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.section-title { font-size: 14px; margin: 18px 0 8px; }
+</style>

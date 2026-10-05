@@ -11,6 +11,11 @@
       </div>
     </header>
 
+    <p class="capacity-banner">
+      主变可用容量回写：可用主变 <strong>{{ availability.可用台数 }}</strong> 台，
+      合计 <strong>{{ availability.可用容量 }}</strong> MVA（共 {{ availability.总台数 }} 台，与主变压器台账一致）
+    </p>
+
     <div class="stat-row">
       <article v-for="item in stats" :key="item.label" class="stat-card">
         <span class="stat-label">{{ item.label }}</span>
@@ -79,13 +84,20 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
+import { transformerAvailability, type TransformerAvailability } from '@/api/transformer-service'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('generation')
-const columns = ["计划编号", "计划日期", "计划出力", "实际出力", "日发电量", "上网电量", "完成比率", "计划状态"]
+const columns = ["计划编号", "计划日期", "计划出力", "实际出力", "日发电量", "上网电量", "完成比率", "可用主变台数", "可用主变容量", "计划状态"]
 const actions = ["提交编制", "下达计划", "确认完成"]
 const statuses = ["待编制", "已下达", "执行中", "已完成"]
-const stats = [{"label": "计划发电量", "value": 0}, {"label": "实际发电量", "value": 0}, {"label": "计划完成率", "value": 0}]
+
+const availability = ref<TransformerAvailability>({ 总台数: 0, 可用台数: 0, 可用容量: 0 })
+const stats = computed(() => [
+  { label: "可用主变台数", value: availability.value.可用台数 },
+  { label: "可用主变容量(MVA)", value: availability.value.可用容量 },
+  { label: "主变总台数", value: availability.value.总台数 },
+])
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
@@ -128,6 +140,7 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    availability.value = transformerAvailability()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '发电计划列表读取失败'
   }
@@ -135,3 +148,15 @@ function reload() {
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.capacity-banner {
+  background: #eef5ff;
+  border: 1px solid #bcd3f7;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin: 0 0 12px;
+  color: #1e3a5f;
+}
+</style>
