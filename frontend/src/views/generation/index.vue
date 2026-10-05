@@ -12,6 +12,14 @@
     </header>
 
     <div class="stat-row">
+      <article class="stat-card">
+        <span class="stat-label">可用主变台数（主变台账回写）</span>
+        <strong class="stat-value">{{ available.count }} / {{ available.total }}</strong>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">可用容量 MVA</span>
+        <strong class="stat-value">{{ available.mva }}</strong>
+      </article>
       <article v-for="item in stats" :key="item.label" class="stat-card">
         <span class="stat-label">{{ item.label }}</span>
         <strong class="stat-value">{{ item.value }}</strong>
@@ -64,7 +72,7 @@
     </table>
 
     <footer class="page-foot">
-      <span>共 {{ total }} 条发电计划记录</span>
+      <span>共 {{ total }} 条发电计划记录；可用主变台数/容量与主变压器页同源同值</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -79,10 +87,11 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
+import { getAvailableSummary, initChain } from '@/data/chain/chain-service'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('generation')
-const columns = ["计划编号", "计划日期", "计划出力", "实际出力", "日发电量", "上网电量", "完成比率", "计划状态"]
+const columns = ["计划编号", "计划日期", "计划出力", "实际出力", "日发电量", "上网电量", "完成比率", "可用主变台数", "可用容量MVA", "计划状态"]
 const actions = ["提交编制", "下达计划", "确认完成"]
 const statuses = ["待编制", "已下达", "执行中", "已完成"]
 const stats = [{"label": "计划发电量", "value": 0}, {"label": "实际发电量", "value": 0}, {"label": "计划完成率", "value": 0}]
@@ -91,6 +100,7 @@ const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
+const available = ref({ count: 0, mva: 0, total: 0 })
 const filterFields = columns.slice(0, 3)
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
@@ -126,12 +136,25 @@ function reload() {
   errorMessage.value = ''
   try {
     const payload = listEntries(meta.key, filters.value)
-    rows.value = payload.items
+    // 以链路库为权威来源再投影一次：即使通用行是旧值，页面也不会读成停运。
+    const summary = getAvailableSummary()
+    available.value = summary
+    rows.value = payload.items.map((row) => ({
+      ...row,
+      可用主变台数: summary.count,
+      可用容量MVA: summary.mva,
+    }))
     total.value = payload.total
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '发电计划列表读取失败'
   }
 }
 
-onMounted(reload)
+onMounted(async () => {
+  const result = await initChain()
+  if (!result.ok) {
+    errorMessage.value = result.message
+  }
+  reload()
+})
 </script>
